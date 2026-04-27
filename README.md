@@ -43,11 +43,24 @@ src/agent/session.rs   →   .split/src/agent/session.skel.rs   (structure)
 
 ## Setup
 
+**1. Install:**
 ```bash
+# from crates.io (once published)
+cargo install split
+
+# or from source
+cargo install --git https://github.com/yesitsfebreeze/split
+
+# or local build
 cargo install --path .
 ```
 
-Add to `.mcp.json`:
+Requires the WASM target for the built-in Rust plugin:
+```bash
+rustup target add wasm32-wasip1
+```
+
+**2. Add to `.mcp.json`:**
 ```json
 {
   "mcpServers": {
@@ -56,19 +69,25 @@ Add to `.mcp.json`:
       "env": {
         "SPLIT_EXT": "rs",
         "SPLIT_SRC_DIR": "src",
-        "SPLIT_INDEX_DIR": ".split"
+        "SPLIT_INDEX_DIR": ".split",
+        "SPLIT_MAX_LOC": "256"
       }
     }
   }
 }
 ```
 
-Bootstrap the index once:
+**3. Bootstrap the index once:**
 ```
 index_dir(src_dir="src", index_dir=".split")
 ```
 
-Add `.split/` to `.gitignore` — it's generated, not source of truth.
+**4. Add to `.gitignore`:**
+```
+.split/
+```
+
+Optional: drop a `split.ini` in the project root instead of env vars — safe to commit.
 
 ## LSP compatibility
 
