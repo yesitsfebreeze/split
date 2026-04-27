@@ -1,4 +1,4 @@
-# ⠎⠏⠇⠊⠞ split
+# split |
 
 MCP server that indexes source files at the function level.
 
@@ -50,7 +50,8 @@ data/schema.json       →   .split/data/schema.skel.json        (structure)
 ### Inside Claude
 
 ```bash
-claude plugin install yesitsfebreeze/split
+claude marketplace add yesitsfebreeze
+claude plugin install split@yesitsfebreeze
 ```
 
 Done. MCP server + skill installed automatically.

@@ -1,21 +1,21 @@
 {
-  "name": "split",
+  "name": "yesitsfebreeze",
   "owner": {
-    "name": "febreeze",
+    "name": "yesitsfebreeze",
     "email": "sh@dasistweb.de"
   },
   "metadata": {
-    "description": "Claude Code plugins by febreeze",
+    "description": "Claude Code plugins by yesitsfebreeze",
     "version": "0.1.0"
   },
   "plugins": [
     {
       "name": "split",
       "source": "./",
-      "description": "Fn-level code index MCP server. Splits source files into per-function body files under .index/. Token-efficient: open_source returns fn map, read_body loads one fn, search_bodies greps 3000+ fns in ~50 tokens. Bidirectional watcher syncs .fs edits back to source.",
+      "description": "Fn-level code index MCP server. Splits source files into per-function body files under .split/. Token-efficient: open_source returns fn map, read_body loads one fn, search_bodies greps 3000+ fns in ~50 tokens. Bidirectional watcher syncs .fs edits back to source. WASM plugin system for any language.",
       "version": "0.1.0",
       "author": {
-        "name": "febreeze"
+        "name": "yesitsfebreeze"
       },
       "category": "development",
       "keywords": [
@@ -25,7 +25,8 @@
         "token-efficient",
         "rust",
         "split",
-        "watcher"
+        "watcher",
+        "wasm"
       ]
     }
   ]
