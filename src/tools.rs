@@ -100,6 +100,18 @@ pub fn list() -> Value {
                 },
                 "required": ["index_dir", "query"]
             }
+        },
+        {
+            "name": "find_large",
+            "description": "List all body files exceeding max_loc lines, sorted by size desc. Use to find functions that need refactoring.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "index_dir": { "type": "string" },
+                    "max_loc":   { "type": "number", "description": "Line threshold (default: SPLIT_MAX_LOC env or 256)" }
+                },
+                "required": ["index_dir"]
+            }
         }
     ])
 }
@@ -223,10 +235,13 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                 return Ok(format!("skeleton: {} (no function bodies extracted)", skel_path.display()));
             }
             entries.sort_by(|a, b| b.0.cmp(&a.0));
+            let max_loc = max_loc_threshold();
             let mut out = format!("skeleton: {}\nbodies:   {}\n", skel_path.display(), file_impl_dir.display());
-            for (sz, p) in &entries {
+            for (_sz, p) in &entries {
                 let fn_name = p.file_stem().unwrap_or_default().to_string_lossy();
-                out.push_str(&format!("{sz:8}  {fn_name}\n"));
+                let loc = count_body_loc(p);
+                let flag = if loc > max_loc { " ⚠" } else { "" };
+                out.push_str(&format!("{loc:6} loc  {fn_name}{flag}\n"));
             }
             Ok(out.trim_end().to_string())
         }
@@ -251,8 +266,44 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                 Ok(results.join("\n"))
             }
         }
+        "find_large" => {
+            let index_dir = PathBuf::from(str_arg(&args, "index_dir")?);
+            let max_loc = args["max_loc"].as_u64().map(|n| n as usize).unwrap_or_else(max_loc_threshold);
+            let mut hits: Vec<(usize, PathBuf)> = walk_fs_files(&index_dir)
+                .into_iter()
+                .filter_map(|p| {
+                    let loc = count_body_loc(&p);
+                    if loc > max_loc { Some((loc, p)) } else { None }
+                })
+                .collect();
+            hits.sort_by(|a, b| b.0.cmp(&a.0));
+            if hits.is_empty() {
+                return Ok(format!("no functions exceed {max_loc} loc"));
+            }
+            Ok(hits.iter()
+                .map(|(loc, p)| {
+                    let name = p.file_stem().unwrap_or_default().to_string_lossy();
+                    let rel = p.strip_prefix(&index_dir).unwrap_or(p);
+                    format!("⚠ {loc:6} loc  {}", rel.with_extension("").display().to_string().replace('\\', "/") + "/" + &name)
+                })
+                .collect::<Vec<_>>()
+                .join("\n"))
+        }
         other => Err(anyhow!("unknown tool: {other}")),
     }
+}
+
+fn max_loc_threshold() -> usize {
+    std::env::var("SPLIT_MAX_LOC")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(256)
+}
+
+fn count_body_loc(path: &Path) -> usize {
+    std::fs::read_to_string(path)
+        .map(|s| s.lines().filter(|l| !l.starts_with("// §")).count())
+        .unwrap_or(0)
 }
 
 fn str_arg<'a>(args: &'a Value, key: &str) -> Result<&'a str> {

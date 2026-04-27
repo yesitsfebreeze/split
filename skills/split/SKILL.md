@@ -20,11 +20,12 @@ Always pass `index_dir=".split"`. Contains both skeletons (`.skel.rs`) and bodie
 | `Grep pattern src/` | `search_bodies(index_dir, query)` |
 | Edit one fn | `open_source` → `read_body` → `write_body` (auto-stitches to .rs) |
 | `Read file.rs` (full file needed) | OK for small/non-Rust files |
+| Find bloated functions | `find_large(index_dir)` |
 
 ## Workflow
 
 ### Explore
-1. `open_source("src/path/to/file.rs", ".split")` — returns fn list sorted by size
+1. `open_source("src/path/to/file.rs", ".split")` — returns fn list sorted by size, ⚠ flags functions over `SPLIT_MAX_LOC`
 2. `read_body(".split/src/path/to/file/fn_name.fs")` — load one fn
 
 ### Search
@@ -39,12 +40,41 @@ Always pass `index_dir=".split"`. Contains both skeletons (`.skel.rs`) and bodie
 If `.split/` is empty:
 - `index_dir(src_dir="src", index_dir=".split")`
 
+## Refactoring oversized functions
+
+Functions are bounded to `SPLIT_MAX_LOC` lines (default: 256). Monolithic functions are the enemy.
+
+**Find candidates:**
+```
+find_large(index_dir=".split")
+→ ⚠   847 loc  src/kern/base/types/process
+→ ⚠   412 loc  src/agent/session/run_turn
+```
+
+**Refactor loop:**
+1. `find_large(".split")` — surfaces all functions over threshold
+2. `read_body` on each ⚠ function — understand what it does
+3. Break into smaller named functions — each under 256 loc
+4. `write_body` each new function — watcher stitches back
+5. Re-run `find_large` — confirm clean
+
+**Philosophy:** structure visible at a glance (skeleton), implementations lean and bounded. No monoliths.
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SPLIT_MAX_LOC` | 256 | Line threshold for ⚠ warnings and `find_large` |
+| `SPLIT_INDEX_DIR` | `.split` | Index directory |
+| `SPLIT_SRC_DIR` | `src` | Source directory for watcher |
+| `SPLIT_DEBOUNCE_MS` | 120000 | Watcher debounce (ms) |
+| `SPLIT_EXT` | `rs` | File extension to index |
+
 ## Watcher
 
 Server auto-starts bidirectional watcher on `src/` ↔ `.split/`:
 - Edit `.fs` → stitched to `.rs` (if `.fs` newer)
 - Edit `.rs` → re-split to `.fs` (if `.rs` newer)
-- 500ms debounce prevents loops
 
 ## Token savings
 
