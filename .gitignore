@@ -1,2 +1,10 @@
+# build artifacts
 target/
+plugins/rs/target/
+
+# generated index (not source of truth)
+.split/
 .index/
+
+# local env overrides (split.ini is safe to commit)
+.env
