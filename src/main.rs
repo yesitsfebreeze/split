@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 
@@ -8,24 +9,40 @@ mod stitcher;
 mod tools;
 mod watcher;
 
+fn load_ini(path: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let Ok(content) = std::fs::read_to_string(path) else { return map };
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') { continue; }
+        if let Some((k, v)) = line.split_once('=') {
+            map.insert(k.trim().to_string(), v.trim().to_string());
+        }
+    }
+    map
+}
+
+fn cfg(key: &str, ini: &HashMap<String, String>, default: &str) -> String {
+    std::env::var(key)
+        .or_else(|_| std::env::var(format!("RELAY_{}", key.strip_prefix("SPLIT_").unwrap_or(key))))
+        .unwrap_or_else(|_| ini.get(key).cloned().unwrap_or_else(|| default.to_string()))
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let index_dir = std::env::var("SPLIT_INDEX_DIR")
-        .or_else(|_| std::env::var("RELAY_INDEX_DIR"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::args().nth(1).map(PathBuf::from).unwrap_or_else(|| PathBuf::from(".index"))
-        });
+    let ini = load_ini("split.ini");
 
-    let src_dir = std::env::var("SPLIT_SRC_DIR")
-        .or_else(|_| std::env::var("RELAY_INDEX_SRC_DIR"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::args().nth(2).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("src"))
-        });
+    let index_dir = PathBuf::from(cfg("SPLIT_INDEX_DIR", &ini, ".index"));
+    let src_dir   = PathBuf::from(cfg("SPLIT_SRC_DIR",   &ini, "src"));
+    let ext       = cfg("SPLIT_EXT",         &ini, "rs");
+    let _debounce = cfg("SPLIT_DEBOUNCE_MS", &ini, "120000"); // read by watcher via env/ini
 
-    let ext = std::env::var("SPLIT_EXT")
-        .unwrap_or_else(|_| std::env::args().nth(3).unwrap_or_else(|| "rs".to_string()));
+    // Propagate ini values as env vars so watcher can read them
+    for (k, v) in &ini {
+        if std::env::var(k).is_err() {
+            std::env::set_var(k, v);
+        }
+    }
 
     if index_dir.exists() && src_dir.exists() {
         let i = index_dir.clone();

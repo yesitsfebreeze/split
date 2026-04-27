@@ -78,6 +78,19 @@ Without debounce, the `.rs` file would contain partial/invalid code mid-edit, ca
 
 Configure debounce via `SPLIT_DEBOUNCE_MS` (default: `120000` — 2 minutes). The long default ensures the source file is only reconstructed once a complete implementation is written, not after each individual function edit.
 
+## Configuration
+
+Place a `split.ini` in your project root. Safe to commit — no secrets.
+
+```ini
+SPLIT_EXT         = rs
+SPLIT_SRC_DIR     = src
+SPLIT_INDEX_DIR   = .index
+SPLIT_DEBOUNCE_MS = 120000
+```
+
+Priority: env vars > `split.ini` > hardcoded defaults.
+
 ## Language support
 
 `SPLIT_EXT=rs` — Rust: full fn-level splitting via built-in parser.
