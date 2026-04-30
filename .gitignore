@@ -1,6 +1,7 @@
 # build artifacts
 target/
-plugins/rs/target/
+languages/rs/target/
+languages/py/target/
 
 # generated index (not source of truth)
 .split/

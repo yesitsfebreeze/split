@@ -21,8 +21,8 @@ pub fn wrap_body(
 }
 
 pub fn split_for_ext(source_path: &Path, index_dir: &Path, ext: &str) -> Result<(String, Vec<BodyFile>)> {
-    if let Some(wasm) = crate::plugin::load(ext) {
-        if let Ok(result) = crate::plugin::split(&wasm, ext, source_path, index_dir) {
+    if let Some(wasm) = crate::language::load(ext) {
+        if let Ok(result) = crate::language::split(&wasm, ext, source_path, index_dir) {
             return Ok(result);
         }
     }
@@ -40,7 +40,7 @@ pub fn split_generic(source_path: &Path, index_dir: &Path) -> Result<(String, Ve
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("");
-    let comment = crate::plugin::meta_for_ext(ext).comment;
+    let comment = crate::language::meta_for_ext(ext).comment;
     let src_display = to_slash(source_path);
     let body_dir = index_dir.join(source_path.with_extension(""));
     let body_path = body_dir.join("_body.fs");
@@ -291,4 +291,28 @@ fn strip_body_edges(s: &str) -> String {
 
 pub fn to_slash(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/")
+}
+
+pub fn skeleton_path(src: &Path, index_dir: &Path) -> PathBuf {
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("rs");
+    index_dir.join(src.with_extension(format!("skel.{ext}")))
+}
+
+const MARKER: char = '§';
+
+pub fn marker_payload(line: &str) -> Option<&str> {
+    let t = line.trim_start();
+    let idx = t.find(MARKER)?;
+    let prefix = &t[..idx];
+    if prefix.len() > 4 {
+        return None;
+    }
+    if !prefix.bytes().all(|b| b == b' ' || (!b.is_ascii_alphanumeric() && b != b'_')) {
+        return None;
+    }
+    Some(&t[idx + MARKER.len_utf8()..])
+}
+
+pub fn is_marker_line(line: &str) -> bool {
+    marker_payload(line).is_some()
 }

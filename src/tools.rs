@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::{plugin, splitter, stitcher};
+use crate::{language, splitter};
 
 pub fn list() -> Value {
     json!([
@@ -188,7 +188,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
         "split" => {
             let src = PathBuf::from(str_arg(&args, "source_path")?);
             let index_dir = PathBuf::from(".split");
-            let skel_path = stitcher::skeleton_path(&src, &index_dir);
+            let skel_path = splitter::skeleton_path(&src, &index_dir);
             if let Some(p) = skel_path.parent() {
                 std::fs::create_dir_all(p)?;
             }
@@ -328,7 +328,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
             let mut files_skipped = 0u32;
             let mut bodies_total = 0u32;
             for src in walk_files(&src_dir, ext) {
-                let skel_path = stitcher::skeleton_path(&src, &index_dir);
+                let skel_path = splitter::skeleton_path(&src, &index_dir);
                 if skel_path.exists() {
                     files_skipped += 1;
                     continue;
@@ -359,7 +359,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
             let src = PathBuf::from(str_arg(&args, "source_path")?);
             let index_dir = PathBuf::from(".split");
             let ext = args["ext"].as_str().unwrap_or("rs");
-            let skel_path = stitcher::skeleton_path(&src, &index_dir);
+            let skel_path = splitter::skeleton_path(&src, &index_dir);
             if !skel_path.exists() {
                 let (skeleton, bodies) = splitter::split_for_ext(&src, &index_dir, ext)?;
                 if let Some(p) = skel_path.parent() {
@@ -483,7 +483,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                 return Err(anyhow!("body file not found: {}", path.display()));
             }
             let content = std::fs::read_to_string(&path)?;
-            let loc = content.lines().filter(|l| !stitcher::is_marker_line(l)).count();
+            let loc = content.lines().filter(|l| !splitter::is_marker_line(l)).count();
             let meta = std::fs::metadata(&path)?;
             let bytes = meta.len();
             let mtime = meta
@@ -508,7 +508,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                 skel_content
                     .lines()
                     .filter(|l| {
-                        stitcher::marker_payload(l)
+                        splitter::marker_payload(l)
                             .map_or(false, |p| p.contains(&body_slug))
                     })
                     .count()
@@ -546,7 +546,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                     for skel in walk_skel_files(&index_dir) {
                         let c = std::fs::read_to_string(&skel).unwrap_or_default();
                         for line in c.lines() {
-                            if let Some(refp) = stitcher::marker_payload(line) {
+                            if let Some(refp) = splitter::marker_payload(line) {
                                 if refp == body_slash || refp.ends_with(&format!("/{}", body_name)) {
                                     refs.push(skel.display().to_string().replace('\\', "/"));
                                     break;
@@ -563,7 +563,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                     out.push_str("out: not applicable for body\n");
                 }
             } else {
-                let skel_path = stitcher::skeleton_path(&path, &index_dir);
+                let skel_path = splitter::skeleton_path(&path, &index_dir);
                 out.push_str(&format!(
                     "source: {}\n",
                     path.display().to_string().replace('\\', "/")
@@ -582,7 +582,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                     let c = std::fs::read_to_string(&skel_path)?;
                     let mut bodies: Vec<String> = Vec::new();
                     for line in c.lines() {
-                        if let Some(refp) = stitcher::marker_payload(line) {
+                        if let Some(refp) = splitter::marker_payload(line) {
                             if refp.starts_with("source ") {
                                 continue;
                             }
@@ -616,7 +616,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                 let c = std::fs::read_to_string(skel).unwrap_or_default();
                 let mut seen: BTreeMap<String, usize> = BTreeMap::new();
                 for line in c.lines() {
-                    if let Some(refp) = stitcher::marker_payload(line) {
+                    if let Some(refp) = splitter::marker_payload(line) {
                         if refp.starts_with("source ") {
                             continue;
                         }
@@ -679,7 +679,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                     let c = std::fs::read_to_string(&skel).unwrap_or_default();
                     let mut new_lines: Vec<&str> = Vec::new();
                     for line in c.lines() {
-                        if let Some(refp) = stitcher::marker_payload(line) {
+                        if let Some(refp) = splitter::marker_payload(line) {
                             if !refp.starts_with("source ") && dead_set.contains(refp) {
                                 removed_dead += 1;
                                 continue;
@@ -821,11 +821,11 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
             Ok(format_grep_results(&results, cursor, limit, query))
         }
         "list_languages" => {
-            let langs = plugin::list();
+            let langs = language::list();
             let arr: Vec<Value> = langs
                 .into_iter()
                 .map(|(ext, source)| {
-                    let meta = plugin::meta_for_ext(&ext);
+                    let meta = language::meta_for_ext(&ext);
                     json!({
                         "ext": ext,
                         "source": source,
@@ -848,7 +848,7 @@ fn max_loc_threshold() -> usize {
 
 fn count_body_loc(path: &Path) -> usize {
     std::fs::read_to_string(path)
-        .map(|s| s.lines().filter(|l| !stitcher::is_marker_line(l)).count())
+        .map(|s| s.lines().filter(|l| !splitter::is_marker_line(l)).count())
         .unwrap_or(0)
 }
 
@@ -950,7 +950,7 @@ fn grep_paths(paths: &[PathBuf], m: &Matcher, skip_section_markers: bool) -> Res
             Err(_) => continue,
         };
         for (i, line) in content.lines().enumerate() {
-            if skip_section_markers && stitcher::is_marker_line(line) {
+            if skip_section_markers && splitter::is_marker_line(line) {
                 continue;
             }
             if matcher_hits(m, line) {
@@ -1012,7 +1012,7 @@ fn strip_body_markers(content: &str) -> String {
     let lines: Vec<&str> = content.lines().collect();
     let start = if lines
         .first()
-        .map_or(false, |l| stitcher::marker_payload(l).map_or(false, |p| p.starts_with("head")))
+        .map_or(false, |l| splitter::marker_payload(l).map_or(false, |p| p.starts_with("head")))
     {
         1
     } else {
@@ -1020,7 +1020,7 @@ fn strip_body_markers(content: &str) -> String {
     };
     let end = if lines
         .last()
-        .map_or(false, |l| stitcher::marker_payload(l).map_or(false, |p| p.starts_with("foot")))
+        .map_or(false, |l| splitter::marker_payload(l).map_or(false, |p| p.starts_with("foot")))
     {
         lines.len().saturating_sub(1)
     } else {

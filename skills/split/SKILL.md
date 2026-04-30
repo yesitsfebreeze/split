@@ -10,7 +10,7 @@ Source is the truth. `.split/` is a derived cache. Watcher: source → `.fs` (on
 
 Edit source files with normal tools (Edit/Write). The index catches up.
 
-Multi-language via WASM. Builtins: `rs`, `py`. Add more by dropping `.wasm` into `.split/languages/` (project) or `~/.config/split/languages/` (user). Extensions without a language plugin still work — whole file stored as one body.
+Multi-language via WASM. Builtins: `rs`, `py`. Add more by dropping `.wasm` into `.split/languages/` (project) or `~/.config/split/languages/` (user). Extensions without a language module still work — whole file stored as one body.
 
 ## Tool map
 

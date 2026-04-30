@@ -135,10 +135,10 @@ Any language that compiles to `wasm32-wasip1` can be a language module. Export:
 
 ```
 wasm_alloc(size: i32) -> i32
-plugin_split(ptr: i32, len: i32) -> i32
-plugin_result_ptr() -> i32
-plugin_meta_ptr() -> i32
-plugin_meta_len() -> i32
+language_split(ptr: i32, len: i32) -> i32
+language_result_ptr() -> i32
+language_meta_ptr() -> i32
+language_meta_len() -> i32
 ```
 
 ## 🧱 Built-in languages

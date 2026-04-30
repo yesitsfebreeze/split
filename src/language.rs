@@ -7,8 +7,8 @@ use wasmtime_wasi::p1;
 
 use crate::splitter::BodyFile;
 
-const BUILTIN_RS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/split_plugin_rs.wasm"));
-const BUILTIN_PY: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/split_plugin_py.wasm"));
+const BUILTIN_RS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/split_language_rs.wasm"));
+const BUILTIN_PY: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/split_language_py.wasm"));
 
 #[derive(Clone, Debug)]
 pub struct Meta {
@@ -125,10 +125,10 @@ pub fn load_meta(wasm: &[u8]) -> Result<Meta> {
     let instance = linker.instantiate(&mut store, &module)?;
     let memory = instance
         .get_memory(&mut store, "memory")
-        .ok_or_else(|| anyhow!("plugin has no memory export"))?;
+        .ok_or_else(|| anyhow!("language module has no memory export"))?;
 
-    let ptr_fn = instance.get_typed_func::<(), i32>(&mut store, "plugin_meta_ptr")?;
-    let len_fn = instance.get_typed_func::<(), i32>(&mut store, "plugin_meta_len")?;
+    let ptr_fn = instance.get_typed_func::<(), i32>(&mut store, "language_meta_ptr")?;
+    let len_fn = instance.get_typed_func::<(), i32>(&mut store, "language_meta_len")?;
     let ptr = ptr_fn.call(&mut store, ())?;
     let len = len_fn.call(&mut store, ())?;
     let mut buf = vec![0u8; len as usize];
@@ -195,11 +195,11 @@ fn run_wasm(wasm: &[u8], input: &str) -> Result<Vec<u8>> {
     let instance = linker.instantiate(&mut store, &module)?;
 
     let memory = instance.get_memory(&mut store, "memory")
-        .ok_or_else(|| anyhow!("plugin has no memory export"))?;
+        .ok_or_else(|| anyhow!("language module has no memory export"))?;
 
     let alloc = instance.get_typed_func::<i32, i32>(&mut store, "wasm_alloc")?;
-    let split_fn = instance.get_typed_func::<(i32, i32), i32>(&mut store, "plugin_split")?;
-    let result_ptr_fn = instance.get_typed_func::<(), i32>(&mut store, "plugin_result_ptr")?;
+    let split_fn = instance.get_typed_func::<(i32, i32), i32>(&mut store, "language_split")?;
+    let result_ptr_fn = instance.get_typed_func::<(), i32>(&mut store, "language_result_ptr")?;
 
     let input_bytes = input.as_bytes();
     let in_ptr = alloc.call(&mut store, input_bytes.len() as i32)?;

@@ -4,9 +4,8 @@ use std::path::PathBuf;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 
 mod mcp;
-mod plugin;
+mod language;
 mod splitter;
-mod stitcher;
 mod tools;
 mod watcher;
 

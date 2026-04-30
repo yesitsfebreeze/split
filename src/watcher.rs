@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::{splitter, stitcher};
+use crate::splitter;
 
 pub fn watch(src_dir: &Path, index_dir: &Path, ext: &str) -> Result<()> {
     let debounce_ms = std::env::var("SPLIT_DEBOUNCE_MS")
@@ -45,7 +45,7 @@ pub fn watch_with_debounce(src_dir: &Path, index_dir: &Path, ext: &str, _debounc
 }
 
 fn on_source_change(src_path: &Path, index_dir: &Path, ext: &str) -> Result<()> {
-    let skel_path = stitcher::skeleton_path(src_path, index_dir);
+    let skel_path = splitter::skeleton_path(src_path, index_dir);
     let (skeleton, bodies) = splitter::split_for_ext(src_path, index_dir, ext)?;
     if let Some(p) = skel_path.parent() { std::fs::create_dir_all(p)?; }
     std::fs::write(&skel_path, &skeleton)?;

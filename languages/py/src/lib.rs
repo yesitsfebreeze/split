@@ -44,17 +44,17 @@ pub extern "C" fn wasm_dealloc(ptr: i32, size: i32) {
 }
 
 #[no_mangle]
-pub extern "C" fn plugin_meta_ptr() -> i32 {
+pub extern "C" fn language_meta_ptr() -> i32 {
     META_JSON.as_ptr() as i32
 }
 
 #[no_mangle]
-pub extern "C" fn plugin_meta_len() -> i32 {
+pub extern "C" fn language_meta_len() -> i32 {
     META_JSON.len() as i32
 }
 
 #[no_mangle]
-pub extern "C" fn plugin_split(ptr: i32, len: i32) -> i32 {
+pub extern "C" fn language_split(ptr: i32, len: i32) -> i32 {
     let input = unsafe { std::slice::from_raw_parts(ptr as *const u8, len as usize) };
     let result = do_split(input);
     unsafe {
@@ -64,7 +64,7 @@ pub extern "C" fn plugin_split(ptr: i32, len: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn plugin_result_ptr() -> i32 {
+pub extern "C" fn language_result_ptr() -> i32 {
     unsafe { OUT.as_ptr() as i32 }
 }
 

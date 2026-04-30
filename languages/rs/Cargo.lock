@@ -76,7 +76,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "split-plugin-py"
+name = "split-language-rs"
 version = "0.1.0"
 dependencies = [
  "serde",

@@ -12,7 +12,7 @@
     {
       "name": "split",
       "source": "./",
-      "description": "Fn-level code index MCP server. Splits source files into per-function body files under .split/. Token-efficient: open_source returns fn map, read_body loads one fn, search_bodies greps 3000+ fns in ~50 tokens. Bidirectional watcher syncs .fs edits back to source. WASM plugin system for any language.",
+      "description": "Fn-level code index MCP server. Splits source files into per-function body files under .split/. Token-efficient: open_source returns fn map, read_body loads one fn, search_bodies greps 3000+ fns in ~50 tokens. Bidirectional watcher syncs .fs edits back to source. WASM language modules for any language.",
       "version": "0.1.0",
       "author": {
         "name": "yesitsfebreeze"
