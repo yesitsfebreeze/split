@@ -88,14 +88,6 @@ pub fn comment_for_skel(skel_path: &Path) -> String {
     plugin::meta_for_ext(ext).comment
 }
 
-pub fn ext_for_skel(skel_path: &Path) -> String {
-    skel_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("rs")
-        .to_string()
-}
-
 const MARKER: char = '§';
 
 pub fn marker_payload(line: &str) -> Option<&str> {
