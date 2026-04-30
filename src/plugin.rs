@@ -1,18 +1,32 @@
 use anyhow::{anyhow, Result};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::preview1;
 
 use crate::splitter::BodyFile;
 
 const BUILTIN_RS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/split_plugin_rs.wasm"));
+const BUILTIN_PY: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/split_plugin_py.wasm"));
+
+#[derive(Clone, Debug)]
+pub struct Meta {
+    pub comment: String,
+}
+
+impl Default for Meta {
+    fn default() -> Self {
+        Meta {
+            comment: "//".into(),
+        }
+    }
+}
 
 struct Ctx {
     wasi: wasmtime_wasi::preview1::WasiP1Ctx,
 }
 
-/// Find plugin bytes for an extension.
-/// Priority: .split/plugins/{ext}.wasm > ~/.config/split/plugins/{ext}.wasm > embedded builtin
 pub fn load(ext: &str) -> Option<Vec<u8>> {
     let filename = format!("{ext}.wasm");
 
@@ -31,8 +45,61 @@ pub fn load(ext: &str) -> Option<Vec<u8>> {
     if ext == "rs" && !BUILTIN_RS.is_empty() {
         return Some(BUILTIN_RS.to_vec());
     }
+    if ext == "py" && !BUILTIN_PY.is_empty() {
+        return Some(BUILTIN_PY.to_vec());
+    }
 
     None
+}
+
+fn meta_cache() -> &'static Mutex<HashMap<String, Meta>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, Meta>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub fn meta_for_ext(ext: &str) -> Meta {
+    if let Some(m) = meta_cache().lock().unwrap().get(ext).cloned() {
+        return m;
+    }
+    let resolved = if let Some(wasm) = load(ext) {
+        load_meta(&wasm).unwrap_or_default()
+    } else {
+        Meta::default()
+    };
+    meta_cache()
+        .lock()
+        .unwrap()
+        .insert(ext.to_string(), resolved.clone());
+    resolved
+}
+
+pub fn load_meta(wasm: &[u8]) -> Result<Meta> {
+    let engine = Engine::default();
+    let mut linker: Linker<Ctx> = Linker::new(&engine);
+    preview1::add_to_linker_sync(&mut linker, |c| &mut c.wasi)?;
+
+    let wasi = wasmtime_wasi::WasiCtxBuilder::new().build_p1();
+    let mut store = Store::new(&engine, Ctx { wasi });
+
+    let module = Module::from_binary(&engine, wasm)?;
+    let instance = linker.instantiate(&mut store, &module)?;
+    let memory = instance
+        .get_memory(&mut store, "memory")
+        .ok_or_else(|| anyhow!("plugin has no memory export"))?;
+
+    let ptr_fn = instance.get_typed_func::<(), i32>(&mut store, "plugin_meta_ptr")?;
+    let len_fn = instance.get_typed_func::<(), i32>(&mut store, "plugin_meta_len")?;
+    let ptr = ptr_fn.call(&mut store, ())?;
+    let len = len_fn.call(&mut store, ())?;
+    let mut buf = vec![0u8; len as usize];
+    memory.read(&store, ptr as usize, &mut buf)?;
+
+    #[derive(serde::Deserialize)]
+    struct Raw {
+        comment: String,
+    }
+    let raw: Raw = serde_json::from_slice(&buf)?;
+    Ok(Meta { comment: raw.comment })
 }
 
 pub fn split(

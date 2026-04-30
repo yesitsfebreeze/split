@@ -5,7 +5,20 @@ use std::path::{Path, PathBuf};
 struct Input {
     source: String,
     source_path: String,
-    split_dir: String,
+    #[serde(alias = "split_dir", alias = "index_dir")]
+    index_dir: String,
+}
+
+static META_JSON: &[u8] = b"{\"comment\":\"//\"}";
+
+#[no_mangle]
+pub extern "C" fn plugin_meta_ptr() -> i32 {
+    META_JSON.as_ptr() as i32
+}
+
+#[no_mangle]
+pub extern "C" fn plugin_meta_len() -> i32 {
+    META_JSON.len() as i32
 }
 
 #[derive(serde::Serialize)]
@@ -58,12 +71,12 @@ fn do_split(input: &[u8]) -> Vec<u8> {
         return b"{}".to_vec();
     };
     let source_path = Path::new(&inp.source_path);
-    let split_dir = Path::new(&inp.split_dir);
-    let out = split_rs(&inp.source, source_path, split_dir);
+    let index_dir = Path::new(&inp.index_dir);
+    let out = split_rs(&inp.source, source_path, index_dir);
     serde_json::to_vec(&out).unwrap_or_default()
 }
 
-fn split_rs(source: &str, source_path: &Path, split_dir: &Path) -> Output {
+fn split_rs(source: &str, source_path: &Path, index_dir: &Path) -> Output {
     let src_display = to_slash(source_path);
     let funcs = find_fns(source);
 
@@ -75,7 +88,7 @@ fn split_rs(source: &str, source_path: &Path, split_dir: &Path) -> Output {
 
     for f in funcs {
         let raw_body = strip_body_edges(&source[f.body_start..f.body_end]);
-        let body_dir = split_dir.join(source_path.with_extension(""));
+        let body_dir = index_dir.join(source_path.with_extension(""));
         let body_path = body_dir.join(format!("{}.fs", f.name));
         let body_path_slash = to_slash(&body_path);
 

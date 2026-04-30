@@ -22,14 +22,23 @@ pub fn split_for_ext(source_path: &Path, index_dir: &Path, ext: &str) -> Result<
 pub fn split_generic(source_path: &Path, index_dir: &Path) -> Result<(String, Vec<BodyFile>)> {
     let source = std::fs::read_to_string(source_path)
         .with_context(|| format!("read {}", source_path.display()))?;
+    let ext = source_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    let comment = crate::plugin::meta_for_ext(ext).comment;
     let src_display = to_slash(source_path);
     let body_dir = index_dir.join(source_path.with_extension(""));
     let body_path = body_dir.join("_body.fs");
     let body_path_slash = to_slash(&body_path);
-    let body_content = format!("// §head {} _body\n{}\n// §foot {} _body", src_display, source.trim_end(), src_display);
-    let skeleton = format!(
-        "// §source {src_display}\n// §{body_path_slash}\n"
+    let body_content = format!(
+        "{c} §head {} _body\n{}\n{c} §foot {} _body",
+        src_display,
+        source.trim_end(),
+        src_display,
+        c = comment
     );
+    let skeleton = format!("{c} §source {src_display}\n{c} §{body_path_slash}\n", c = comment);
     Ok((skeleton, vec![BodyFile { path: body_path, content: body_content }]))
 }
 

@@ -46,7 +46,7 @@ pub fn watch_with_debounce(src_dir: &Path, index_dir: &Path, ext: &str, debounce
                         if let Err(e) = on_body_change(&path, &written) {
                             eprintln!("stitch error: {e}");
                         }
-                    } else if path_ext == src_ext && !path.to_string_lossy().contains(".skel.rs") {
+                    } else if path_ext == src_ext && !path.to_string_lossy().contains(".skel.") {
                         if let Err(e) = on_source_change(&path, &index_dir, &src_ext, &written) {
                             eprintln!("split error: {e}");
                         }
@@ -102,8 +102,18 @@ fn on_source_change(src_path: &Path, index_dir: &Path, ext: &str, written: &Writ
 
 fn skeleton_for_body(body: &Path) -> Option<PathBuf> {
     let fn_dir = body.parent()?;
-    let dir_name = fn_dir.file_name()?;
+    let dir_name = fn_dir.file_name()?.to_string_lossy().to_string();
     let parent = fn_dir.parent()?;
-    let skel = parent.join(format!("{}.skel.rs", dir_name.to_string_lossy()));
-    if skel.exists() { Some(skel) } else { None }
+    let prefix = format!("{}.skel.", dir_name);
+    for entry in std::fs::read_dir(parent).ok()?.flatten() {
+        let p = entry.path();
+        let fname = match p.file_name().and_then(|f| f.to_str()) {
+            Some(f) => f.to_string(),
+            None => continue,
+        };
+        if fname.starts_with(&prefix) {
+            return Some(p);
+        }
+    }
+    None
 }

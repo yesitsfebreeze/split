@@ -24,7 +24,7 @@ pub fn list() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "skeleton_path": { "type": "string", "description": "Path to .skel.rs file" }
+                    "skeleton_path": { "type": "string", "description": "Path to .skel.<ext> file" }
                 },
                 "required": ["skeleton_path"]
             }
@@ -622,7 +622,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
             let existing = std::fs::read_to_string(&path)?;
             let new_content = if let Some(nl) = existing.find('\n') {
                 let first_line = &existing[..nl];
-                if first_line.starts_with("// §") {
+                if stitcher::is_marker_line(first_line) {
                     let mut s = String::with_capacity(existing.len() + content.len() + 1);
                     s.push_str(&existing[..=nl]);
                     s.push_str(content);
@@ -640,7 +640,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                     s.push_str(&existing);
                     s
                 }
-            } else if existing.starts_with("// §") {
+            } else if stitcher::is_marker_line(&existing) {
                 let mut s = existing.clone();
                 if !s.ends_with('\n') {
                     s.push('\n');
@@ -686,21 +686,24 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
             let new_skel = skel_content.replace(&old_ref, &new_ref);
 
             let body_content = std::fs::read_to_string(&path)?;
+            let comment = stitcher::comment_for_skel(&skel);
             let mut new_body_lines: Vec<String> = Vec::new();
             for line in body_content.lines() {
-                if let Some(rest) = line.strip_prefix("// §head ") {
-                    if let Some((src, name)) = rest.rsplit_once(' ') {
-                        if name == old_name {
-                            new_body_lines.push(format!("// §head {src} {new_name}"));
-                            continue;
+                if let Some(payload) = stitcher::marker_payload(line) {
+                    if let Some(rest) = payload.strip_prefix("head ") {
+                        if let Some((src, name)) = rest.rsplit_once(' ') {
+                            if name == old_name {
+                                new_body_lines.push(format!("{comment} §head {src} {new_name}"));
+                                continue;
+                            }
                         }
                     }
-                }
-                if let Some(rest) = line.strip_prefix("// §foot ") {
-                    if let Some((src, name)) = rest.rsplit_once(' ') {
-                        if name == old_name {
-                            new_body_lines.push(format!("// §foot {src} {new_name}"));
-                            continue;
+                    if let Some(rest) = payload.strip_prefix("foot ") {
+                        if let Some((src, name)) = rest.rsplit_once(' ') {
+                            if name == old_name {
+                                new_body_lines.push(format!("{comment} §foot {src} {new_name}"));
+                                continue;
+                            }
                         }
                     }
                 }
@@ -736,9 +739,8 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
             let new_skel: String = skel_content
                 .lines()
                 .filter(|line| {
-                    let trimmed = line.trim();
-                    if let Some(ref_path) = trimmed.strip_prefix("// §") {
-                        ref_path.trim() != ref_marker
+                    if let Some(payload) = stitcher::marker_payload(line) {
+                        payload.trim() != ref_marker
                     } else {
                         true
                     }
@@ -825,8 +827,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
             let mut order_map: std::collections::HashMap<String, usize> =
                 std::collections::HashMap::new();
             for (idx, line) in skeleton.lines().enumerate() {
-                let trimmed = line.trim();
-                if let Some(ref_path) = trimmed.strip_prefix("// §") {
+                if let Some(ref_path) = stitcher::marker_payload(line) {
                     if ref_path.starts_with("source ") {
                         continue;
                     }
@@ -866,10 +867,12 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
             let src_display = stitcher::source_path_from_skel(&skel)?;
             let src_slash = splitter::to_slash(&src_display);
 
+            let comment = stitcher::comment_for_skel(&skel);
             let new_body_path = parent.join(format!("{new_name}.fs"));
             let new_body_content = format!(
-                "// §head {} {}\n{}\n// §foot {} {}",
-                src_slash, new_name, merged_inner, src_slash, new_name
+                "{c} §head {} {}\n{}\n{c} §foot {} {}",
+                src_slash, new_name, merged_inner, src_slash, new_name,
+                c = comment
             );
             std::fs::write(&new_body_path, &new_body_content)?;
 
@@ -886,8 +889,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
 
             let mut new_skel = String::with_capacity(skeleton.len());
             for (idx, line) in skeleton.lines().enumerate() {
-                let trimmed = line.trim();
-                if let Some(ref_path) = trimmed.strip_prefix("// §") {
+                if let Some(ref_path) = stitcher::marker_payload(line) {
                     if !ref_path.starts_with("source ") {
                         let fname = Path::new(ref_path)
                             .file_name()
@@ -898,7 +900,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                                 let indent_len = line.len() - line.trim_start().len();
                                 let indent = &line[..indent_len];
                                 new_skel.push_str(indent);
-                                new_skel.push_str("// §");
+                                new_skel.push_str(&format!("{} §", comment));
                                 new_skel.push_str(&new_ref_path_slash);
                                 new_skel.push('\n');
                             }
@@ -964,7 +966,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                 return Err(anyhow!("body file not found: {}", path.display()));
             }
             let content = std::fs::read_to_string(&path)?;
-            let loc = content.lines().filter(|l| !l.trim_start().starts_with("// §")).count();
+            let loc = content.lines().filter(|l| !stitcher::is_marker_line(l)).count();
             let meta = std::fs::metadata(&path)?;
             let bytes = meta.len();
             let mtime = meta
@@ -989,8 +991,8 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                 skel_content
                     .lines()
                     .filter(|l| {
-                        let t = l.trim();
-                        t.starts_with("// §") && t.contains(&body_slug)
+                        stitcher::marker_payload(l)
+                            .map_or(false, |p| p.contains(&body_slug))
                     })
                     .count()
             } else {
@@ -1027,8 +1029,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                     for skel in walk_skel_files(&index_dir) {
                         let c = std::fs::read_to_string(&skel).unwrap_or_default();
                         for line in c.lines() {
-                            let t = line.trim();
-                            if let Some(refp) = t.strip_prefix("// §") {
+                            if let Some(refp) = stitcher::marker_payload(line) {
                                 if refp == body_slash || refp.ends_with(&format!("/{}", body_name)) {
                                     refs.push(skel.display().to_string().replace('\\', "/"));
                                     break;
@@ -1064,8 +1065,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                     let c = std::fs::read_to_string(&skel_path)?;
                     let mut bodies: Vec<String> = Vec::new();
                     for line in c.lines() {
-                        let t = line.trim();
-                        if let Some(refp) = t.strip_prefix("// §") {
+                        if let Some(refp) = stitcher::marker_payload(line) {
                             if refp.starts_with("source ") {
                                 continue;
                             }
@@ -1099,8 +1099,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                 let c = std::fs::read_to_string(skel).unwrap_or_default();
                 let mut seen: BTreeMap<String, usize> = BTreeMap::new();
                 for line in c.lines() {
-                    let t = line.trim();
-                    if let Some(refp) = t.strip_prefix("// §") {
+                    if let Some(refp) = stitcher::marker_payload(line) {
                         if refp.starts_with("source ") {
                             continue;
                         }
@@ -1163,8 +1162,7 @@ pub async fn call(name: &str, args: Value) -> Result<String> {
                     let c = std::fs::read_to_string(&skel).unwrap_or_default();
                     let mut new_lines: Vec<&str> = Vec::new();
                     for line in c.lines() {
-                        let t = line.trim();
-                        if let Some(refp) = t.strip_prefix("// §") {
+                        if let Some(refp) = stitcher::marker_payload(line) {
                             if !refp.starts_with("source ") && dead_set.contains(refp) {
                                 removed_dead += 1;
                                 continue;
@@ -1331,7 +1329,7 @@ fn max_loc_threshold() -> usize {
 
 fn count_body_loc(path: &Path) -> usize {
     std::fs::read_to_string(path)
-        .map(|s| s.lines().filter(|l| !l.starts_with("// §")).count())
+        .map(|s| s.lines().filter(|l| !stitcher::is_marker_line(l)).count())
         .unwrap_or(0)
 }
 
@@ -1351,7 +1349,7 @@ fn walk_files(dir: &Path, ext: &str) -> Vec<PathBuf> {
         if path.is_dir() {
             out.extend(walk_files(&path, ext));
         } else if path.extension().map_or(false, |e| e == ext)
-            && !path.to_string_lossy().contains(".skel.rs")
+            && !path.to_string_lossy().contains(".skel.")
         {
             out.push(path);
         }
@@ -1384,7 +1382,20 @@ fn walk_skel_files(dir: &Path) -> Vec<PathBuf> {
         let path = entry.path();
         if path.is_dir() {
             out.extend(walk_skel_files(&path));
-        } else if path.to_string_lossy().ends_with(".skel.rs") {
+        } else if path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .map_or(false, |f| {
+                if let Some(idx) = f.find(".skel.") {
+                    f[idx + ".skel.".len()..]
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+                        && !f[idx + ".skel.".len()..].is_empty()
+                } else {
+                    false
+                }
+            })
+        {
             out.push(path);
         }
     }
@@ -1420,7 +1431,7 @@ fn grep_paths(paths: &[PathBuf], m: &Matcher, skip_section_markers: bool) -> Res
             Err(_) => continue,
         };
         for (i, line) in content.lines().enumerate() {
-            if skip_section_markers && line.starts_with("// §") {
+            if skip_section_markers && stitcher::is_marker_line(line) {
                 continue;
             }
             if matcher_hits(m, line) {
@@ -1450,8 +1461,10 @@ fn format_grep_results(results: &[String], cursor: usize, limit: usize, query: &
 fn derive_origin_source(body: &Path, index_dir: &Path) -> Option<PathBuf> {
     let fn_dir = body.parent()?;
     let rel = fn_dir.strip_prefix(index_dir).ok()?;
+    let skel = skeleton_for_body_path(body)?;
+    let ext = skel.extension().and_then(|e| e.to_str()).unwrap_or("rs");
     let mut src = rel.to_path_buf();
-    src.set_extension("rs");
+    src.set_extension(ext);
     Some(src)
 }
 
@@ -1478,8 +1491,18 @@ fn format_iso8601(secs: u64) -> String {
 
 fn strip_body_markers(content: &str) -> String {
     let lines: Vec<&str> = content.lines().collect();
-    let start = if lines.first().map_or(false, |l| l.trim_start().starts_with("// §head")) { 1 } else { 0 };
-    let end = if lines.last().map_or(false, |l| l.trim_start().starts_with("// §foot")) {
+    let start = if lines
+        .first()
+        .map_or(false, |l| stitcher::marker_payload(l).map_or(false, |p| p.starts_with("head")))
+    {
+        1
+    } else {
+        0
+    };
+    let end = if lines
+        .last()
+        .map_or(false, |l| stitcher::marker_payload(l).map_or(false, |p| p.starts_with("foot")))
+    {
         lines.len().saturating_sub(1)
     } else {
         lines.len()
@@ -1573,12 +1596,18 @@ fn stitch_after(path: &Path) -> Result<String> {
 
 fn skeleton_for_body_path(body: &Path) -> Option<PathBuf> {
     let fn_dir = body.parent()?;
-    let dir_name = fn_dir.file_name()?;
+    let dir_name = fn_dir.file_name()?.to_string_lossy().to_string();
     let parent = fn_dir.parent()?;
-    let skel = parent.join(format!("{}.skel.rs", dir_name.to_string_lossy()));
-    if skel.exists() {
-        Some(skel)
-    } else {
-        None
+    let prefix = format!("{}.skel.", dir_name);
+    for entry in std::fs::read_dir(parent).ok()?.flatten() {
+        let p = entry.path();
+        let fname = match p.file_name().and_then(|f| f.to_str()) {
+            Some(f) => f.to_string(),
+            None => continue,
+        };
+        if fname.starts_with(&prefix) {
+            return Some(p);
+        }
     }
+    None
 }
